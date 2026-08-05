@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>环境监测 AI 分析系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+        header h1 { font-size: 2.5rem; color: #64b5f6; margin-bottom: 10px; }
+        header p { color: #90a4ae; font-size: 1.1rem; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }
+        .status-ok { background: rgba(76, 175, 80, 0.2); color: #81c784; border: 1px solid #4caf50; }
+        .status-error { background: rgba(244, 67, 54, 0.2); color: #ef5350; border: 1px solid #f44336; }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .card-icon { font-size: 2rem; margin-bottom: 12px; }
+        .card-value { font-size: 2rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .card-label { color: #90a4ae; font-size: 0.9rem; }
+        .card-delta { font-size: 0.8rem; margin-top: 8px; }
+        .delta-up { color: #ef5350; }
+        .delta-down { color: #81c784; }
+
+        .section {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .section-title {
+            font-size: 1.3rem;
+            color: #64b5f6;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .chart-box {
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .chart-box h3 {
+            font-size: 1rem;
+            color: #b0bec5;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .chart-container { position: relative; height: 300px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td { padding: 12px 16px; text-align: center; }
+        th {
+            background: rgba(100, 181, 246, 0.15);
+            color: #64b5f6;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
+        tr:hover { background: rgba(255,255,255,0.03); }
+        .aqi-good { color: #81c784; font-weight: 600; }
+        .aqi-moderate { color: #fff176; font-weight: 600; }
+        .aqi-unhealthy { color: #ff8a65; font-weight: 600; }
+        .aqi-bad { color: #ef5350; font-weight: 600; }
+
+        .alert-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .alert-warning { background: rgba(255, 167, 38, 0.2); color: #ffa726; }
+        .alert-critical { background: rgba(244, 67, 54, 0.2); color: #ef5350; }
+        .alert-none { background: rgba(76, 175, 80, 0.2); color: #81c784; }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 16px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+        }
+        .chat-message {
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            line-height: 1.6;
+            white-space: pre-line;
+        }
+        .chat-user {
+            align-self: flex-end;
+            background: rgba(100, 181, 246, 0.25);
+            color: #e3f2fd;
+        }
+        .chat-bot {
+            align-self: flex-start;
+            background: rgba(255,255,255,0.08);
+            color: #e0e0e0;
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(0,0,0,0.2);
+            color: #fff;
+            font-size: 1rem;
+        }
+        .chat-input:focus { outline: none; border-color: #64b5f6; }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #64b5f6, #42a5f5);
+            color: #fff;
+        }
+        .btn-primary:hover { background: linear-gradient(135deg, #42a5f5, #2196f3); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #e0e0e0;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+        .predict-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .predict-input-group { display: flex; flex-direction: column; gap: 4px; }
+        .predict-input-group label { font-size: 0.8rem; color: #90a4ae; }
+        .predict-input-group input {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(0,0,0,0.2);
+            color: #fff;
+            font-size: 0.95rem;
+        }
+        .predict-input-group input:focus { outline: none; border-color: #64b5f6; }
+        .predict-result {
+            margin-top: 16px;
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(100, 181, 246, 0.1);
+            border: 1px solid rgba(100, 181, 246, 0.2);
+            text-align: center;
+        }
+        .predict-result h3 { color: #64b5f6; margin-bottom: 8px; }
+        .predict-result .big { font-size: 3rem; font-weight: 700; color: #fff; }
+        .predict-result .unit { color: #90a4ae; }
+
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: #90a4ae;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        .tab-btn.active {
+            background: rgba(100, 181, 246, 0.2);
+            color: #64b5f6;
+            border-color: rgba(100, 181, 246, 0.4);
+        }
+        .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.08); color: #e0e0e0; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #90a4ae;
+        }
+        .loading::after {
+            content: "";
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #64b5f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-msg {
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            color: #ef5350;
+            text-align: center;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #546e7a;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 768px) {
+            header h1 { font-size: 1.8rem; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .cards-grid { grid-template-columns: repeat(2, 1fr); }
+            .predict-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌍 环境监测 AI 分析系统</h1>
+            <p>基于机器学习的多站点空气质量监测与预测平台</p>
+            <div id="statusBadge" class="status-badge status-ok">✅ 系统正常运行中</div>
+        </header>
+
+        <!-- 概览卡片 -->
+        <div class="cards-grid" id="overviewCards">
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <div class="card-value" id="totalRecords">-</div>
+                <div class="card-label">总监测记录</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🏭</div>
+                <div class="card-value" id="stationCount">-</div>
+                <div class="card-label">监测站点</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📅</div>
+                <div class="card-value" id="timeRange" style="font-size: 1.2rem;">-</div>
+                <div class="card-label">监测周期</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🌿</div>
+                <div class="card-value" id="goodDays">-</div>
+                <div class="card-label">平均优良率</div>
+            </div>
+        </div>
+
+        <!-- Tab 导航 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="dashboard">📈 数据仪表盘</button>
+            <button class="tab-btn" data-tab="stations">🏭 站点详情</button>
+            <button class="tab-btn" data-tab="predict">🔮 PM2.5 预测</button>
+            <button class="tab-btn" data-tab="chat">🤖 AI 智能问答</button>
+        </div>
+
+        <!-- Tab: 仪表盘 -->
+        <div class="tab-panel active" id="tab-dashboard">
+            <div class="chart-grid">
+                <div class="chart-box">
+                    <h3>各站点 PM2.5 月度均值趋势</h3>
+                    <div class="chart-container"><canvas id="chartPm25Monthly"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3>AQI 等级分布</h3>
+                    <div class="chart-container"><canvas id="chartAqiDist"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3>各季节 PM2.5 分布</h3>
+                    <div class="chart-container"><canvas id="chartSeason"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3>PM2.5 日变化模式 (24h)</h3>
+                    <div class="chart-container"><canvas id="chartDiurnal"></canvas></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">📋 相关性矩阵</div>
+                <div id="correlationTable"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">⚠️ 当前告警</div>
+                <div id="alertsArea">
+                    <div class="loading">正在加载告警数据...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 站点 -->
+        <div class="tab-panel" id="tab-stations">
+            <div class="section">
+                <div class="section-title">🏭 各站点实时数据</div>
+                <div id="stationTableArea">
+                    <div class="loading">正在加载站点数据...</div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-title">📊 站点对比</div>
+                <div class="chart-container" style="height: 350px;"><canvas id="chartStationCompare"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tab: 预测 -->
+        <div class="tab-panel" id="tab-predict">
+            <div class="section">
+                <div class="section-title">🔮 PM2.5 浓度预测</div>
+                <p style="color: #90a4ae; margin-bottom: 16px;">输入环境指标，使用随机森林模型预测 PM2.5 浓度</p>
+                <div class="predict-grid">
+                    <div class="predict-input-group"><label>PM10 (μg/m³)</label><input type="number" id="p_PM10" value="60" step="0.1"></div>
+                    <div class="predict-input-group"><label>SO2 (μg/m³)</label><input type="number" id="p_SO2" value="12" step="0.1"></div>
+                    <div class="predict-input-group"><label>NO2 (μg/m³)</label><input type="number" id="p_NO2" value="30" step="0.1"></div>
+                    <div class="predict-input-group"><label>CO (mg/m³)</label><input type="number" id="p_CO" value="0.8" step="0.01"></div>
+                    <div class="predict-input-group"><label>O3 (μg/m³)</label><input type="number" id="p_O3" value="45" step="0.1"></div>
+                    <div class="predict-input-group"><label>温度 (°C)</label><input type="number" id="p_temp" value="22" step="0.1"></div>
+                    <div class="predict-input-group"><label>湿度 (%)</label><input type="number" id="p_humidity" value="65" step="0.1"></div>
+                    <div class="predict-input-group"><label>风速 (m/s)</label><input type="number" id="p_wind" value="3.5" step="0.1"></div>
+                    <div class="predict-input-group"><label>PM2.5 滞后1h</label><input type="number" id="p_lag1h" value="35" step="0.1"></div>
+                    <div class="predict-input-group"><label>PM2.5 滞后24h</label><input type="number" id="p_lag24h" value="40" step="0.1"></div>
+                    <div class="predict-input-group"><label>PM2.5 6h均值</label><input type="number" id="p_roll6h" value="38" step="0.1"></div>
+                </div>
+                <button class="btn btn-primary" onclick="runPredict()">🚀 开始预测</button>
+                <div id="predictResult"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">📈 特征重要性</div>
+                <div class="chart-container" style="height: 300px;"><canvas id="chartFeatureImportance"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tab: AI 问答 -->
+        <div class="tab-panel" id="tab-chat">
+            <div class="section">
+                <div class="section-title">🤖 环境监测 AI 助手</div>
+                <p style="color: #90a4ae; margin-bottom: 16px;">可以询问 PM2.5、AQI、季节分析、站点对比、预测方法等问题</p>
+                <div class="chat-container" id="chatContainer">
+                    <div class="chat-message chat-bot">你好！我是环境监测 AI 助手，可以帮您分析空气质量数据。请问有什么想了解的吗？</div>
+                </div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="输入您的问题..." onkeydown="if(event.key==='Enter')sendChat()">
+                    <button class="btn btn-primary" onclick="sendChat()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>环境监测 AI 分析系统 | Powered by FastAPI + Random Forest + Chart.js</p>
+            <p style="margin-top: 4px;">数据来源: 模拟监测数据 (5站点 x 8760小时) | 模型 R² > 0.95</p>
+        </footer>
+    </div>
+
+    <script>
+    const API_BASE = '';
+    const STATION_COLORS = {
+        '城区站': '#ef5350',
+        '工业园站': '#ffa726',
+        '郊区站': '#66bb6a',
+        '滨海站': '#42a5f5',
+        '山脚站': '#ab47bc'
+    };
+
+    // ─── Chart.js 默认配置 ───
+    Chart.defaults.color = '#b0bec5';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    // ─── Tab 切换 ───
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // ─── 通用请求 ───
+    async function apiGet(path) {
+        const res = await fetch(API_BASE + path);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+    }
+    async function apiPost(path, body) {
+        const res = await fetch(API_BASE + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+    }
+
+    // ─── 加载概览 ───
+    async function loadOverview() {
+        try {
+            const data = await apiGet('/api/overview');
+            document.getElementById('totalRecords').textContent = data.total_records.toLocaleString();
+            document.getElementById('stationCount').textContent = data.stations;
+            document.getElementById('timeRange').textContent = data.time_start.slice(0, 7) + ' ~ ' + data.time_end.slice(0, 7);
+
+            // 加载优良率
+            const stations = await apiGet('/api/stations');
+            const avgGood = stations.reduce((s, st) => s + st.good_days, 0) / stations.length;
+            document.getElementById('goodDays').textContent = avgGood.toFixed(1) + '%';
+        } catch (e) {
+            document.getElementById('statusBadge').className = 'status-badge status-error';
+            document.getElementById('statusBadge').textContent = '❌ 后端连接失败';
+        }
+    }
+
+    // ─── 图表1: PM2.5 月度趋势 ───
+    async function loadChartPm25Monthly() {
+        const data = await apiGet('/api/charts/pm25-monthly');
+        const stations = Object.keys(data[0]).filter(k => k !== 'month');
+        const datasets = stations.map(st => ({
+            label: st,
+            data: data.map(d => d[st]),
+            borderColor: STATION_COLORS[st] || '#90a4ae',
+            backgroundColor: STATION_COLORS[st] + '20' || '#90a4ae20',
+            tension: 0.3,
+            fill: false
+        }));
+        new Chart(document.getElementById('chartPm25Monthly'), {
+            type: 'line',
+            data: { labels: data.map(d => d.month + '月'), datasets },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 图表2: AQI 分布 ───
+    async function loadChartAqiDist() {
+        const data = await apiGet('/api/aqi-distribution');
+        const colors = { '优': '#66bb6a', '良': '#42a5f5', '轻度污染': '#ffa726', '中度污染': '#ef5350', '重度污染': '#c62828', '严重污染': '#7b1fa2' };
+        new Chart(document.getElementById('chartAqiDist'), {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.level),
+                datasets: [{
+                    data: data.map(d => d.percentage),
+                    backgroundColor: data.map(d => colors[d.level] || '#90a4ae')
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    // ─── 图表3: 季节箱线图 (简化为柱状+误差线) ───
+    async function loadChartSeason() {
+        const data = await apiGet('/api/charts/season-boxplot');
+        new Chart(document.getElementById('chartSeason'), {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.season),
+                datasets: [
+                    { label: '最小值', data: data.map(d => d.min), backgroundColor: '#42a5f530' },
+                    { label: '均值', data: data.map(d => d.mean), backgroundColor: '#64b5f6' },
+                    { label: '最大值', data: data.map(d => d.max), backgroundColor: '#ef535030' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 图表4: 日变化模式 ───
+    async function loadChartDiurnal() {
+        const data = await apiGet('/api/charts/diurnal-pattern');
+        const datasets = data.map(d => ({
+            label: d.station,
+            data: d.hourly_pm25,
+            borderColor: STATION_COLORS[d.station] || '#90a4ae',
+            tension: 0.3,
+            pointRadius: 2
+        }));
+        new Chart(document.getElementById('chartDiurnal'), {
+            type: 'line',
+            data: { labels: Array.from({length: 24}, (_, i) => i + '时'), datasets },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 相关性矩阵表格 ───
+    async function loadCorrelation() {
+        const data = await apiGet('/api/correlation');
+        const cols = Object.keys(data[0]).filter(k => k !== 'indicator');
+        let html = '<table><thead><tr><th>指标</th>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+        for (const row of data) {
+            html += '<tr><td><b>' + row.indicator + '</b></td>';
+            for (const c of cols) {
+                const v = row[c];
+                let color = '';
+                if (Math.abs(v) > 0.7) color = v > 0 ? 'color:#81c784' : 'color:#ef5350';
+                else if (Math.abs(v) > 0.4) color = v > 0 ? 'color:#aed581' : 'color:#ff8a65';
+                html += '<td style="' + color + '">' + v.toFixed(2) + '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        document.getElementById('correlationTable').innerHTML = html;
+    }
+
+    // ─── 告警 ───
+    async function loadAlerts() {
+        try {
+            const data = await apiGet('/api/alerts');
+            if (data.length === 0) {
+                document.getElementById('alertsArea').innerHTML = '<span class="alert-badge alert-none">✅ 当前无超标告警，所有指标正常</span>';
+            } else {
+                let html = '';
+                for (const a of data) {
+                    const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
+                    html += '<span class="alert-badge ' + cls + '">' + a.station + ' ' + a.metric + '=' + a.value + ' (阈值' + a.threshold + ')</span> ';
+                }
+                document.getElementById('alertsArea').innerHTML = html;
+            }
+        } catch (e) {
+            document.getElementById('alertsArea').innerHTML = '<div class="error-msg">加载告警数据失败</div>';
+        }
+    }
+
+    // ─── 站点实时数据 ───
+    async function loadStationTable() {
+        const latest = await apiGet('/api/stations/latest');
+        let html = '<table><thead><tr><th>站点</th><th>类型</th><th>PM2.5</th><th>PM10</th><th>SO2</th><th>NO2</th><th>CO</th><th>O3</th><th>温度</th><th>湿度</th><th>风速</th><th>AQI</th><th>等级</th></tr></thead><tbody>';
+        for (const s of latest) {
+            const aqiClass = s.AQI <= 50 ? 'aqi-good' : s.AQI <= 100 ? 'aqi-moderate' : s.AQI <= 150 ? 'aqi-unhealthy' : 'aqi-bad';
+            html += `<tr>
+                <td><b>${s.station}</b></td>
+                <td>${s.station_type}</td>
+                <td>${s.PM25}</td>
+                <td>${s.PM10}</td>
+                <td>${s.SO2}</td>
+                <td>${s.NO2}</td>
+                <td>${s.CO}</td>
+                <td>${s.O3}</td>
+                <td>${s.temperature}°C</td>
+                <td>${s.humidity}%</td>
+                <td>${s.wind_speed}</td>
+                <td><b>${s.AQI}</b></td>
+                <td class="${aqiClass}">${s.aqi_level}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('stationTableArea').innerHTML = html;
+    }
+
+    // ─── 站点对比图表 ───
+    async function loadStationCompareChart() {
+        const stations = await apiGet('/api/stations');
+        new Chart(document.getElementById('chartStationCompare'), {
+            type: 'bar',
+            data: {
+                labels: stations.map(s => s.name),
+                datasets: [
+                    { label: 'PM2.5均值', data: stations.map(s => s.avg_pm25), backgroundColor: '#ef5350' },
+                    { label: 'AQI均值', data: stations.map(s => s.avg_aqi), backgroundColor: '#42a5f5' },
+                    { label: '优良率(%)', data: stations.map(s => s.good_days), backgroundColor: '#66bb6a' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 预测 ───
+    async function runPredict() {
+        const resultDiv = document.getElementById('predictResult');
+        resultDiv.innerHTML = '<div class="loading">正在预测...</div>';
+        try {
+            const body = {
+                PM10: parseFloat(document.getElementById('p_PM10').value) || 0,
+                SO2: parseFloat(document.getElementById('p_SO2').value) || 0,
+                NO2: parseFloat(document.getElementById('p_NO2').value) || 0,
+                CO: parseFloat(document.getElementById('p_CO').value) || 0,
+                O3: parseFloat(document.getElementById('p_O3').value) || 0,
+                temperature: parseFloat(document.getElementById('p_temp').value) || 0,
+                humidity: parseFloat(document.getElementById('p_humidity').value) || 0,
+                wind_speed: parseFloat(document.getElementById('p_wind').value) || 0,
+                PM25_lag1h: parseFloat(document.getElementById('p_lag1h').value) || 0,
+                PM25_lag24h: parseFloat(document.getElementById('p_lag24h').value) || 0,
+                PM25_roll6h: parseFloat(document.getElementById('p_roll6h').value) || 0
+            };
+            const res = await apiPost('/api/predict', body);
+            let level = '优', color = '#66bb6a';
+            const v = res.pm25_prediction;
+            if (v > 35) { level = '良'; color = '#42a5f5'; }
+            if (v > 75) { level = '轻度污染'; color = '#ffa726'; }
+            if (v > 115) { level = '中度污染'; color = '#ef5350'; }
+            if (v > 150) { level = '重度污染'; color = '#c62828'; }
+            resultDiv.innerHTML = `
+                <div class="predict-result">
+                    <h3>预测结果</h3>
+                    <div class="big" style="color:${color}">${res.pm25_prediction}</div>
+                    <div class="unit">μg/m³ — PM2.5 浓度</div>
+                    <div style="margin-top:12px; font-size:1.1rem; color:${color}">${level}</div>
+                </div>`;
+        } catch (e) {
+            resultDiv.innerHTML = '<div class="error-msg">预测失败: ' + e.message + '</div>';
+        }
+    }
+
+    // ─── 特征重要性 ───
+    async function loadFeatureImportance() {
+        const data = await apiGet('/api/model/feature-importance');
+        new Chart(document.getElementById('chartFeatureImportance'), {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.feature),
+                datasets: [{
+                    label: '重要性 (%)',
+                    data: data.map(d => d.percentage),
+                    backgroundColor: '#64b5f6'
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    // ─── AI 聊天 ───
+    async function sendChat() {
+        const input = document.getElementById('chatInput');
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = '';
+
+        const container = document.getElementById('chatContainer');
+        container.innerHTML += `<div class="chat-message chat-user">${question}</div>`;
+        container.scrollTop = container.scrollHeight;
+
+        try {
+            const res = await apiPost('/api/chat', { question });
+            container.innerHTML += `<div class="chat-message chat-bot">${res.answer}</div>`;
+        } catch (e) {
+            container.innerHTML += `<div class="chat-message chat-bot" style="color:#ef5350">抱歉，请求失败，请稍后重试。</div>`;
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // ─── 初始化 ───
+    async function init() {
+        await loadOverview();
+        await loadChartPm25Monthly();
+        await loadChartAqiDist();
+        await loadChartSeason();
+        await loadChartDiurnal();
+        await loadCorrelation();
+        await loadAlerts();
+        await loadStationTable();
+        await loadStationCompareChart();
+        await loadFeatureImportance();
+    }
+    init();
+    </script>
+</body>
+</html>
