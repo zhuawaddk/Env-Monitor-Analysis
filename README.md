@@ -79,7 +79,3 @@ python visualize.py      # 生成图表
 ## 工具
 
 Python · Pandas / NumPy · Scikit-learn（随机森林）· FastAPI · Matplotlib
-
-## License
-
-MIT
