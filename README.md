@@ -138,7 +138,3 @@ curl -X POST "http://localhost:8000/api/model/train?city=beijing"
 └── data/
     └── air_quality_cities.csv
 ```
-
-## 许可证
-
-MIT
