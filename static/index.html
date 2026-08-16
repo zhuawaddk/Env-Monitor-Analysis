@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多城市空气质量监测 AI 分析系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #f2f7fc 0%, #eef4f9 50%, #eaf3ee 100%);
+            min-height: 100vh;
+            color: #37474f;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header {
+            text-align: center;
+            padding: 40px 20px 24px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            margin-bottom: 30px;
+        }
+        header h1 { font-size: 2.5rem; color: #1976d2; margin-bottom: 10px; }
+        header p { color: #78909c; font-size: 1.1rem; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }
+        .status-ok { background: rgba(76, 175, 80, 0.12); color: #43a047; border: 1px solid #a5d6a7; }
+        .status-error { background: rgba(244, 67, 54, 0.1); color: #e53935; border: 1px solid #ef9a9a; }
+
+        .city-bar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+        .city-btn {
+            padding: 10px 22px;
+            border-radius: 24px;
+            border: 1px solid #dbe4ec;
+            background: #ffffff;
+            color: #607d8b;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .city-btn.active {
+            background: linear-gradient(135deg, #42a5f5, #1e88e5);
+            color: #fff;
+            border-color: transparent;
+            font-weight: 600;
+        }
+        .city-btn:hover:not(.active) { background: #f0f6fc; color: #1976d2; border-color: #bbdefb; }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid #e3eaf1;
+            box-shadow: 0 2px 12px rgba(30, 60, 90, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 8px 28px rgba(30, 60, 90, 0.12); }
+        .card-icon { font-size: 2rem; margin-bottom: 12px; }
+        .card-value { font-size: 2rem; font-weight: 700; color: #263238; margin-bottom: 4px; }
+        .card-label { color: #78909c; font-size: 0.9rem; }
+
+        .section {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid #e3eaf1;
+            box-shadow: 0 2px 12px rgba(30, 60, 90, 0.06);
+        }
+        .section-title {
+            font-size: 1.3rem;
+            color: #1976d2;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .chart-box {
+            background: #fafcfe;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e8eef4;
+        }
+        .chart-box h3 {
+            font-size: 1rem;
+            color: #607d8b;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .chart-container { position: relative; height: 300px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td { padding: 12px 16px; text-align: center; }
+        th {
+            background: rgba(25, 118, 210, 0.07);
+            color: #1976d2;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        tr { border-bottom: 1px solid #eef2f6; }
+        tr:hover { background: #f5f9fd; }
+        .aqi-good { color: #43a047; font-weight: 600; }
+        .aqi-moderate { color: #f9a825; font-weight: 600; }
+        .aqi-unhealthy { color: #fb8c00; font-weight: 600; }
+        .aqi-bad { color: #e53935; font-weight: 600; }
+
+        .alert-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .alert-warning { background: rgba(251, 140, 0, 0.12); color: #ef6c00; }
+        .alert-critical { background: rgba(229, 57, 53, 0.1); color: #e53935; }
+        .alert-none { background: rgba(67, 160, 71, 0.12); color: #43a047; }
+        .alert-blue { background: rgba(30, 136, 229, 0.1); color: #1e88e5; border: 1px solid rgba(30, 136, 229, 0.25); }
+        .alert-yellow { background: rgba(249, 168, 37, 0.12); color: #f57f17; border: 1px solid rgba(249, 168, 37, 0.3); }
+        .alert-orange { background: rgba(239, 108, 0, 0.1); color: #ef6c00; border: 1px solid rgba(239, 108, 0, 0.28); }
+        .alert-red { background: rgba(229, 57, 53, 0.1); color: #e53935; border: 1px solid rgba(229, 57, 53, 0.28); }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f5f8fb;
+            border-radius: 12px;
+            border: 1px solid #e8eef4;
+        }
+        .chat-message {
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            line-height: 1.6;
+            white-space: pre-line;
+        }
+        .chat-user {
+            align-self: flex-end;
+            background: #dcebfb;
+            color: #0d47a1;
+        }
+        .chat-bot {
+            align-self: flex-start;
+            background: #ffffff;
+            color: #37474f;
+            border: 1px solid #e3eaf1;
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid #dbe4ec;
+            background: #ffffff;
+            color: #37474f;
+            font-size: 1rem;
+        }
+        .chat-input:focus { outline: none; border-color: #42a5f5; }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #42a5f5, #1e88e5);
+            color: #fff;
+        }
+        .btn-primary:hover { background: linear-gradient(135deg, #1e88e5, #1976d2); }
+        .btn-secondary {
+            background: #eef3f8;
+            color: #546e7a;
+        }
+        .btn-secondary:hover { background: #e2ebf3; }
+
+        .predict-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .predict-input-group { display: flex; flex-direction: column; gap: 4px; }
+        .predict-input-group label { font-size: 0.8rem; color: #78909c; }
+        .predict-input-group input, .predict-input-group select {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #dbe4ec;
+            background: #ffffff;
+            color: #37474f;
+            font-size: 0.95rem;
+        }
+        .predict-input-group input:focus, .predict-input-group select:focus { outline: none; border-color: #42a5f5; }
+        .predict-input-group select option { background: #ffffff; }
+        .predict-result {
+            margin-top: 16px;
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(25, 118, 210, 0.05);
+            border: 1px solid rgba(25, 118, 210, 0.15);
+            text-align: center;
+        }
+        .predict-result h3 { color: #1976d2; margin-bottom: 8px; }
+        .predict-result .big { font-size: 3rem; font-weight: 700; color: #263238; }
+        .predict-result .unit { color: #78909c; }
+
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #dbe4ec;
+            background: #ffffff;
+            color: #78909c;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        .tab-btn.active {
+            background: rgba(25, 118, 210, 0.08);
+            color: #1976d2;
+            border-color: rgba(25, 118, 210, 0.3);
+        }
+        .tab-btn:hover:not(.active) { background: #f0f6fc; color: #37474f; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #90a4ae;
+        }
+        .loading::after {
+            content: "";
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(0,0,0,0.08);
+            border-top-color: #42a5f5;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-msg {
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(229, 57, 53, 0.06);
+            border: 1px solid rgba(229, 57, 53, 0.2);
+            color: #e53935;
+            text-align: center;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #90a4ae;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 768px) {
+            header h1 { font-size: 1.8rem; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .cards-grid { grid-template-columns: repeat(2, 1fr); }
+            .predict-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌍 多城市空气质量监测 AI 分析系统</h1>
+            <p>基于机器学习的多城市空气质量监测、预测与预警平台</p>
+            <div class="city-bar" id="cityBar"></div>
+            <div id="statusBadge" class="status-badge status-ok">✅ 系统正常运行中</div>
+        </header>
+
+        <!-- 概览卡片 -->
+        <div class="cards-grid" id="overviewCards">
+            <div class="card">
+                <div class="card-icon">🏙️</div>
+                <div class="card-value" id="cardCity">-</div>
+                <div class="card-label">当前城市</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🌫️</div>
+                <div class="card-value" id="cardPm25">-</div>
+                <div class="card-label">PM2.5 年均值 (μg/m³)</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <div class="card-value" id="cardAqi">-</div>
+                <div class="card-label">AQI 年均值</div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🌿</div>
+                <div class="card-value" id="cardGoodDays">-</div>
+                <div class="card-label">空气优良率</div>
+            </div>
+        </div>
+
+        <!-- Tab 导航 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="dashboard">📈 数据仪表盘</button>
+            <button class="tab-btn" data-tab="compare">🏙️ 城市对比</button>
+            <button class="tab-btn" data-tab="predict">🔮 污染物预测</button>
+            <button class="tab-btn" data-tab="chat">🤖 AI 智能问答</button>
+        </div>
+
+        <!-- Tab: 仪表盘 -->
+        <div class="tab-panel active" id="tab-dashboard">
+            <div class="section">
+                <div class="section-title">📡 实时空气质量</div>
+                <div id="realtimeArea">
+                    <div class="loading">正在加载实时数据...</div>
+                </div>
+            </div>
+            <div class="section" style="padding: 14px 24px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="color: #90a4ae; margin-right: 8px;">📊 分析污染物</span>
+                <span id="pollutantBar" style="display: flex; gap: 8px; flex-wrap: wrap;"></span>
+                <span style="color: #546e7a; font-size: 0.8rem;">（以下趋势、季节、日变化与 24h 预警均跟随所选污染物）</span>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-box">
+                    <h3 id="monthlyTitle">PM2.5 月度均值趋势</h3>
+                    <div class="chart-container"><canvas id="chartPm25Monthly"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3>AQI 等级分布</h3>
+                    <div class="chart-container"><canvas id="chartAqiDist"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3 id="seasonTitle">各季节 PM2.5 分布</h3>
+                    <div class="chart-container"><canvas id="chartSeason"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3 id="diurnalTitle">PM2.5 日变化模式 (24h)</h3>
+                    <div class="chart-container"><canvas id="chartDiurnal"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3 id="meansTitle">各污染物年均值</h3>
+                    <div class="chart-container"><canvas id="chartPollutantMeans"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h3>首要污染物占比（全年小时数）</h3>
+                    <div class="chart-container"><canvas id="chartPrimary"></canvas></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">📋 污染物与气象相关性矩阵</div>
+                <div id="correlationTable"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🚨 综合预警中心 <span style="font-size:0.8rem; color:#90a4ae;">空气污染 / 高温 / 大风 / 暴雨 / 官方预警（台风等）</span></div>
+                <div id="alertsArea">
+                    <div class="loading">正在加载综合预警...</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🔮 未来 24 小时预测预警</div>
+                <div id="forecastAlertsArea">
+                    <div class="loading">正在加载预测预警...</div>
+                </div>
+                <div class="chart-container" style="margin-top:16px; height:260px;"><canvas id="chartForecast24"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tab: 城市对比 -->
+        <div class="tab-panel" id="tab-compare">
+            <div class="section">
+                <div class="section-title">🏙️ 各城市最新数据</div>
+                <div id="cityTableArea">
+                    <div class="loading">正在加载城市数据...</div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-title">📊 城市空气质量对比（近一年）
+                    <select id="comparePollutant" onchange="loadCityCompareChart(); loadCityMonthlyChart();" style="padding:6px 12px; border-radius:8px; border:1px solid #dbe4ec; background:#ffffff; color:#37474f; font-size:0.85rem;">
+                        <option value="PM25">PM2.5</option>
+                        <option value="PM10">PM10</option>
+                        <option value="O3">O3</option>
+                        <option value="NO2">NO2</option>
+                    </select>
+                </div>
+                <div class="chart-container" style="height: 350px;"><canvas id="chartCityCompare"></canvas></div>
+            </div>
+            <div class="section">
+                <div class="section-title" id="cityMonthlyTitle">📈 各城市 PM2.5 月度趋势对比</div>
+                <div class="chart-container" style="height: 350px;"><canvas id="chartCityMonthly"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tab: 预测 -->
+        <div class="tab-panel" id="tab-predict">
+            <div class="section">
+                <div class="section-title">🔮 污染物浓度预测 <span id="predictCityTag" style="font-size:0.85rem; color:#90a4ae;"></span></div>
+                <p style="color: #90a4ae; margin-bottom: 16px;">模型按城市分别训练。选择目标污染物，输入环境指标，预测下一时刻浓度</p>
+                <div class="predict-grid">
+                    <div class="predict-input-group">
+                        <label>目标污染物</label>
+                        <select id="p_pollutant" onchange="onPollutantChange()">
+                            <option value="PM25">PM2.5</option>
+                            <option value="PM10">PM10</option>
+                            <option value="O3">O3</option>
+                            <option value="NO2">NO2</option>
+                        </select>
+                    </div>
+                    <div class="predict-input-group"><label>PM2.5 (μg/m³)</label><input type="number" id="p_PM25" value="35" step="0.1"></div>
+                    <div class="predict-input-group"><label>PM10 (μg/m³)</label><input type="number" id="p_PM10" value="60" step="0.1"></div>
+                    <div class="predict-input-group"><label>SO2 (μg/m³)</label><input type="number" id="p_SO2" value="12" step="0.1"></div>
+                    <div class="predict-input-group"><label>NO2 (μg/m³)</label><input type="number" id="p_NO2" value="30" step="0.1"></div>
+                    <div class="predict-input-group"><label>CO (mg/m³)</label><input type="number" id="p_CO" value="0.8" step="0.01"></div>
+                    <div class="predict-input-group"><label>O3 (μg/m³)</label><input type="number" id="p_O3" value="45" step="0.1"></div>
+                    <div class="predict-input-group"><label>温度 (°C)</label><input type="number" id="p_temp" value="22" step="0.1"></div>
+                    <div class="predict-input-group"><label>湿度 (%)</label><input type="number" id="p_humidity" value="65" step="0.1"></div>
+                    <div class="predict-input-group"><label>风速 (m/s)</label><input type="number" id="p_wind" value="3.5" step="0.1"></div>
+                    <div class="predict-input-group"><label id="lag1Label">PM2.5 滞后1h</label><input type="number" id="p_lag1h" value="35" step="0.1"></div>
+                    <div class="predict-input-group"><label id="lag24Label">PM2.5 滞后24h</label><input type="number" id="p_lag24h" value="40" step="0.1"></div>
+                    <div class="predict-input-group"><label id="roll6Label">PM2.5 6h均值</label><input type="number" id="p_roll6h" value="38" step="0.1"></div>
+                </div>
+                <button class="btn btn-primary" onclick="runPredict()">🚀 开始预测</button>
+                <button class="btn btn-secondary" onclick="prefillPredict()">📥 填入该城市最新实测值</button>
+                <span id="prefillInfo" style="color:#546e7a; font-size:0.8rem; margin-left:10px;"></span>
+                <div id="predictResult"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">📈 特征重要性</div>
+                <div class="chart-container" style="height: 300px;"><canvas id="chartFeatureImportance"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tab: AI 问答 -->
+        <div class="tab-panel" id="tab-chat">
+            <div class="section">
+                <div class="section-title">🤖 环境监测 AI 助手</div>
+                <p style="color: #90a4ae; margin-bottom: 16px;">默认基于当前选中城市回答，也可以直接问其它城市，如"上海的 PM2.5 怎么样"、"六个城市对比"</p>
+                <div class="chat-container" id="chatContainer">
+                    <div class="chat-message chat-bot">你好！我是环境监测 AI 助手，可以帮您分析各城市空气质量数据。请问有什么想了解的吗？</div>
+                </div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="输入您的问题..." onkeydown="if(event.key==='Enter')sendChat()">
+                    <button class="btn btn-primary" onclick="sendChat()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>多城市空气质量监测 AI 分析系统 | Powered by FastAPI + 随机森林 + FastGPT + Chart.js</p>
+            <p style="margin-top: 4px;">数据来源: Open-Meteo（CAMS 空气质量再分析 + ERA5 气象再分析，6 城市 × 近一年 ≈ 5.3 万条小时级记录）| 实时数据: WAQI</p>
+        </footer>
+    </div>
+
+    <script>
+    const API_BASE = '';
+    const CITIES = [
+        { key: 'beijing',   name: '北京' },
+        { key: 'shanghai',  name: '上海' },
+        { key: 'guangzhou', name: '广州' },
+        { key: 'shenzhen',  name: '深圳' },
+        { key: 'chengdu',   name: '成都' },
+        { key: 'xian',      name: '西安' }
+    ];
+    const CITY_COLORS = {
+        '北京': '#ef5350', '上海': '#42a5f5', '广州': '#ffa726',
+        '深圳': '#66bb6a', '成都': '#ab47bc', '西安': '#ffca28'
+    };
+    let currentCity = 'beijing';
+    let currentPollutant = 'PM25';  // 仪表盘分析污染物
+    const ANALYSIS_POLLUTANTS = [
+        { key: 'PM25', label: 'PM2.5' },
+        { key: 'PM10', label: 'PM10' },
+        { key: 'O3',   label: 'O3' },
+        { key: 'NO2',  label: 'NO2' }
+    ];
+    const charts = {};  // canvas id -> Chart 实例, 切换城市时销毁重建
+
+    function makeChart(id, cfg) {
+        if (charts[id]) charts[id].destroy();
+        charts[id] = new Chart(document.getElementById(id), cfg);
+    }
+
+    // ─── Chart.js 默认配置 ───
+    Chart.defaults.color = '#78909c';
+    Chart.defaults.borderColor = 'rgba(0,0,0,0.07)';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    // ─── Tab 切换 ───
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // ─── 城市切换 ───
+    function renderCityBar() {
+        const bar = document.getElementById('cityBar');
+        bar.innerHTML = '';
+        for (const c of CITIES) {
+            const btn = document.createElement('button');
+            btn.className = 'city-btn' + (c.key === currentCity ? ' active' : '');
+            btn.textContent = c.name;
+            btn.onclick = () => setCity(c.key);
+            bar.appendChild(btn);
+        }
+    }
+
+    async function setCity(key) {
+        if (key === currentCity) return;
+        currentCity = key;
+        renderCityBar();
+        await loadCityScoped();
+    }
+
+    // ─── 分析污染物切换 ───
+    function pollutantLabel() {
+        return ANALYSIS_POLLUTANTS.find(p => p.key === currentPollutant).label;
+    }
+
+    function renderPollutantBar() {
+        const bar = document.getElementById('pollutantBar');
+        bar.innerHTML = '';
+        for (const p of ANALYSIS_POLLUTANTS) {
+            const btn = document.createElement('button');
+            btn.className = 'city-btn' + (p.key === currentPollutant ? ' active' : '');
+            btn.style.cssText = 'padding:6px 16px; font-size:0.85rem;';
+            btn.textContent = p.label;
+            btn.onclick = () => setPollutant(p.key);
+            bar.appendChild(btn);
+        }
+    }
+
+    async function setPollutant(key) {
+        if (key === currentPollutant) return;
+        currentPollutant = key;
+        renderPollutantBar();
+        await loadChartPm25Monthly();
+        await loadChartSeason();
+        await loadChartDiurnal();
+        await loadForecastAlerts();
+    }
+
+    // ─── 通用请求 ───
+    async function apiGet(path) {
+        const res = await fetch(API_BASE + path);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+    }
+    async function apiPost(path, body) {
+        const res = await fetch(API_BASE + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+    }
+
+    function cityName() {
+        return CITIES.find(c => c.key === currentCity).name;
+    }
+
+    // ─── 加载概览卡片 ───
+    async function loadOverview() {
+        try {
+            const data = await apiGet('/api/overview?city=' + currentCity);
+            document.getElementById('cardCity').textContent = data.name;
+            document.getElementById('cardPm25').textContent = data.avg_pm25;
+            document.getElementById('cardAqi').textContent = data.avg_aqi;
+            document.getElementById('cardGoodDays').textContent = data.good_days + '%';
+        } catch (e) {
+            document.getElementById('statusBadge').className = 'status-badge status-error';
+            document.getElementById('statusBadge').textContent = '❌ 后端连接失败';
+        }
+    }
+
+    // ─── 图表1: 污染物月度趋势（当前城市）───
+    async function loadChartPm25Monthly() {
+        const data = await apiGet('/api/charts/pm25-monthly?city=' + currentCity + '&pollutant=' + currentPollutant);
+        const name = cityName();
+        const label = pollutantLabel();
+        document.getElementById('monthlyTitle').textContent = name + ' ' + label + ' 月度均值趋势';
+        makeChart('chartPm25Monthly', {
+            type: 'line',
+            data: {
+                labels: data.map(d => d.month + '月'),
+                datasets: [{
+                    label: name,
+                    data: data.map(d => d[name]),
+                    borderColor: CITY_COLORS[name] || '#64b5f6',
+                    backgroundColor: (CITY_COLORS[name] || '#64b5f6') + '30',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+    }
+
+    // ─── 图表2: AQI 分布 ───
+    async function loadChartAqiDist() {
+        const data = await apiGet('/api/aqi-distribution?city=' + currentCity);
+        const colors = { '优': '#66bb6a', '良': '#42a5f5', '轻度污染': '#ffa726', '中度污染': '#ef5350', '重度污染': '#c62828', '严重污染': '#7b1fa2' };
+        makeChart('chartAqiDist', {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.level),
+                datasets: [{
+                    data: data.map(d => d.percentage),
+                    backgroundColor: data.map(d => colors[d.level] || '#90a4ae')
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    // ─── 图表3: 季节分布 ───
+    async function loadChartSeason() {
+        const data = await apiGet('/api/charts/season-boxplot?city=' + currentCity + '&pollutant=' + currentPollutant);
+        document.getElementById('seasonTitle').textContent = '各季节 ' + pollutantLabel() + ' 分布';
+        makeChart('chartSeason', {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.season),
+                datasets: [
+                    { label: '最小值', data: data.map(d => d.min), backgroundColor: '#42a5f530' },
+                    { label: '均值', data: data.map(d => d.mean), backgroundColor: '#64b5f6' },
+                    { label: '最大值', data: data.map(d => d.max), backgroundColor: '#ef535030' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 图表4: 日变化模式 ───
+    async function loadChartDiurnal() {
+        const data = await apiGet('/api/charts/diurnal-pattern?city=' + currentCity + '&pollutant=' + currentPollutant);
+        const name = cityName();
+        document.getElementById('diurnalTitle').textContent = pollutantLabel() + ' 日变化模式 (24h)';
+        makeChart('chartDiurnal', {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 24}, (_, i) => i + '时'),
+                datasets: [{
+                    label: name,
+                    data: data[0].hourly_pm25,
+                    borderColor: CITY_COLORS[name] || '#64b5f6',
+                    tension: 0.3,
+                    pointRadius: 2
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+    }
+
+    // ─── 图表5: 各污染物年均值 ───
+    async function loadChartPollutantMeans() {
+        const data = await apiGet('/api/charts/pollutant-means?city=' + currentCity);
+        document.getElementById('meansTitle').textContent = cityName() + ' 各污染物年均值 (μg/m³)';
+        const colors = { 'PM2.5': '#ef5350', 'PM10': '#ff8a65', 'SO2': '#ffca28', 'NO2': '#42a5f5', 'O3': '#66bb6a', 'CO(mg/m³)': '#ab47bc' };
+        makeChart('chartPollutantMeans', {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.pollutant),
+                datasets: [{ data: data.map(d => d.value), backgroundColor: data.map(d => colors[d.pollutant] || '#90a4ae') }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+    }
+
+    // ─── 图表6: 首要污染物占比 ───
+    async function loadChartPrimary() {
+        const data = await apiGet('/api/charts/primary-pollutant?city=' + currentCity);
+        const colors = { 'PM2.5': '#ef5350', 'PM10': '#ff8a65', 'SO2': '#ffca28', 'NO2': '#42a5f5', 'O3': '#66bb6a', 'CO': '#ab47bc' };
+        makeChart('chartPrimary', {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.pollutant),
+                datasets: [{
+                    data: data.map(d => d.percentage),
+                    backgroundColor: data.map(d => colors[d.pollutant] || '#90a4ae')
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    // ─── 实时空气质量 ───
+    function aqiColor(aqi) {
+        if (aqi <= 50) return '#66bb6a';
+        if (aqi <= 100) return '#42a5f5';
+        if (aqi <= 150) return '#ffa726';
+        if (aqi <= 200) return '#ef5350';
+        return '#c62828';
+    }
+
+    async function loadRealtime() {
+        const area = document.getElementById('realtimeArea');
+        try {
+            const d = await apiGet('/api/realtime?city=' + currentCity);
+            let html = `<div style="font-size:0.8rem; color:#78909c; margin-bottom:12px;">${d.source} | 数据时间: ${d.time}${d.live ? ' | <span style="color:#81c784">● LIVE</span>' : ''}</div>`;
+
+            if (d.live) {
+                const aqiText = (typeof d.aqi === 'number') ? d.aqi : '—';
+                const c = (typeof d.aqi === 'number') ? aqiColor(d.aqi) : '#90a4ae';
+                html += `<div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                        <div style="font-size:3rem; font-weight:700; color:${c}">${aqiText}</div>
+                        <div style="color:#90a4ae; font-size:0.85rem;">实时 AQI</div>
+                    </div>`;
+                for (const [k, v] of Object.entries(d.pollutants)) {
+                    html += `<div style="text-align:center; padding:8px 14px; background:rgba(25,118,210,0.06); border:1px solid rgba(25,118,210,0.1); border-radius:10px;">
+                        <div style="font-size:1.2rem; font-weight:600;">${v}</div>
+                        <div style="color:#90a4ae; font-size:0.75rem;">${k}</div></div>`;
+                }
+                html += '</div>';
+            } else {
+                // 降级: 历史最新时点
+                const s = d.stations[0];
+                const c = aqiColor(s.AQI);
+                html += `<div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                        <div style="font-size:3rem; font-weight:700; color:${c}">${s.AQI}</div>
+                        <div style="color:#90a4ae; font-size:0.85rem;">AQI（${s.aqi_level}）</div>
+                    </div>`;
+                for (const k of ['PM25', 'PM10', 'SO2', 'NO2', 'O3']) {
+                    html += `<div style="text-align:center; padding:8px 14px; background:rgba(25,118,210,0.06); border:1px solid rgba(25,118,210,0.1); border-radius:10px;">
+                        <div style="font-size:1.2rem; font-weight:600;">${s[k]}</div>
+                        <div style="color:#90a4ae; font-size:0.75rem;">${k}</div></div>`;
+                }
+                html += '</div>';
+            }
+
+            if (d.alerts && d.alerts.length > 0) {
+                html += '<div style="margin-top:12px;">';
+                for (const a of d.alerts) {
+                    const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
+                    const where = a.station ? a.station + ' ' : '';
+                    html += `<span class="alert-badge ${cls}">⚠️ ${where}${a.metric}=${a.value}（阈值 ${a.threshold}）</span> `;
+                }
+                html += '</div>';
+            }
+            area.innerHTML = html;
+        } catch (e) {
+            area.innerHTML = '<div class="error-msg">实时数据加载失败</div>';
+        }
+    }
+
+    // ─── 相关性矩阵表格 ───
+    async function loadCorrelation() {
+        const data = await apiGet('/api/correlation?city=' + currentCity);
+        const cols = Object.keys(data[0]).filter(k => k !== 'indicator');
+        let html = '<table><thead><tr><th>指标</th>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>';
+        for (const row of data) {
+            html += '<tr><td><b>' + row.indicator + '</b></td>';
+            for (const c of cols) {
+                const v = row[c];
+                let color = '';
+                if (Math.abs(v) > 0.7) color = v > 0 ? 'color:#81c784' : 'color:#ef5350';
+                else if (Math.abs(v) > 0.4) color = v > 0 ? 'color:#aed581' : 'color:#ff8a65';
+                html += '<td style="' + color + '">' + v.toFixed(2) + '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        document.getElementById('correlationTable').innerHTML = html;
+    }
+
+    // ─── 综合预警中心 ───
+    async function loadAlerts() {
+        const area = document.getElementById('alertsArea');
+        try {
+            const d = await apiGet('/api/alerts/comprehensive?city=' + currentCity);
+            const lvlCls = { blue: 'alert-blue', yellow: 'alert-yellow', orange: 'alert-orange', red: 'alert-red' };
+            let html = `<div style="font-size:0.8rem; color:#78909c; margin-bottom:12px;">污染预警依据: ${d.basis} ｜ 气象预警依据: Open-Meteo 未来24h预报${d.official_enabled ? '' : ' ｜ 官方预警（台风等）需配置 QWEATHER_KEY'}</div>`;
+
+            const total = d.pollution.length + d.forecast.length + d.weather.length + d.official.length;
+            if (total === 0) {
+                html += '<span class="alert-badge alert-none">✅ ' + d.city + '当前无空气污染、高温、大风、暴雨等各类预警</span>';
+            }
+
+            const groups = [
+                ['🌫️ 空气污染预警（当前）', d.pollution],
+                ['🔮 空气污染预警（未来 24h 预测）', d.forecast],
+                ['🌡️ 气象预警（未来 24h 预报）', d.weather]
+            ];
+            for (const [title, arr] of groups) {
+                if (!arr.length) continue;
+                html += `<div style="margin-bottom:14px;"><div style="color:#607d8b; font-size:0.9rem; margin-bottom:8px; font-weight:600;">${title}</div>`;
+                for (const a of arr) {
+                    const iaqiTxt = a.iaqi ? `（IAQI ${a.iaqi}）` : `（阈值 ${a.threshold}）`;
+                    html += `<span class="alert-badge ${lvlCls[a.level]}" style="margin:0 6px 6px 0; padding:6px 12px; font-size:0.8rem;">${a.category} ${a.level_name}｜${a.metric} ${a.value}${a.unit}${iaqiTxt}<span style="opacity:0.65">｜${a.basis}</span></span>`;
+                }
+                html += '</div>';
+            }
+
+            if (d.official.length) {
+                html += '<div><div style="color:#607d8b; font-size:0.9rem; margin-bottom:8px; font-weight:600;">📢 气象部门官方预警</div>';
+                for (const w of d.official) {
+                    html += `<div style="background:rgba(229,57,53,0.04); border:1px solid rgba(229,57,53,0.15); border-radius:10px; padding:10px 14px; margin-bottom:8px;">
+                        <b>${w.title}</b><span style="color:#78909c; font-size:0.75rem;">　${w.time}</span>
+                        <div style="font-size:0.85rem; margin-top:4px; color:#546e7a;">${w.text}</div></div>`;
+                }
+                html += '</div>';
+            }
+            area.innerHTML = html;
+        } catch (e) {
+            area.innerHTML = '<div class="error-msg">加载综合预警失败</div>';
+        }
+    }
+
+    // ─── 城市最新数据表（与仪表盘实时板块同源）───
+    async function loadCityTable() {
+        const d = await apiGet('/api/cities/realtime');
+        const rows = d.rows;
+        let html = `<div style="font-size:0.8rem; color:#78909c; margin-bottom:10px;">数据来源: ${d.source}${d.live ? ' | <span style="color:#81c784">● LIVE</span>' : ''}</div>`;
+        html += '<table><thead><tr><th>城市</th><th>PM2.5</th><th>PM10</th><th>SO2</th><th>NO2</th><th>CO</th><th>O3</th><th>温度</th><th>湿度</th><th>AQI</th><th>等级</th><th>数据时间</th></tr></thead><tbody>';
+        const fmt = v => (v === null || v === undefined) ? '—' : v;
+        for (const s of rows) {
+            const aqiClass = s.AQI <= 50 ? 'aqi-good' : s.AQI <= 100 ? 'aqi-moderate' : s.AQI <= 150 ? 'aqi-unhealthy' : 'aqi-bad';
+            html += `<tr>
+                <td><b>${s.station}</b></td>
+                <td>${fmt(s.PM25)}</td>
+                <td>${fmt(s.PM10)}</td>
+                <td>${fmt(s.SO2)}</td>
+                <td>${fmt(s.NO2)}</td>
+                <td>${fmt(s.CO)}</td>
+                <td>${fmt(s.O3)}</td>
+                <td>${fmt(s.temperature)}</td>
+                <td>${fmt(s.humidity)}</td>
+                <td><b>${fmt(s.AQI)}</b></td>
+                <td class="${aqiClass}">${s.aqi_level}</td>
+                <td style="font-size:0.75rem; color:#78909c;">${s.time || s.timestamp || ''}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('cityTableArea').innerHTML = html;
+    }
+
+    // ─── 城市对比图表 ───
+    const COMPARE_FIELD = { PM25: 'avg_pm25', PM10: 'avg_pm10', O3: 'avg_o3', NO2: 'avg_no2' };
+    async function loadCityCompareChart() {
+        const cities = await apiGet('/api/cities');
+        const cp = document.getElementById('comparePollutant').value;
+        const cplabel = ANALYSIS_POLLUTANTS.find(p => p.key === cp).label;
+        makeChart('chartCityCompare', {
+            type: 'bar',
+            data: {
+                labels: cities.map(s => s.name),
+                datasets: [
+                    { label: cplabel + '均值', data: cities.map(s => s[COMPARE_FIELD[cp]]), backgroundColor: '#ef5350' },
+                    { label: 'AQI均值', data: cities.map(s => s.avg_aqi), backgroundColor: '#42a5f5' },
+                    { label: '优良率(%)', data: cities.map(s => s.good_days), backgroundColor: '#66bb6a' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 各城市月度趋势对比 ───
+    async function loadCityMonthlyChart() {
+        const cp = document.getElementById('comparePollutant').value;
+        const cplabel = ANALYSIS_POLLUTANTS.find(p => p.key === cp).label;
+        document.getElementById('cityMonthlyTitle').textContent = '📈 各城市 ' + cplabel + ' 月度趋势对比';
+        const data = await apiGet('/api/charts/pm25-monthly?pollutant=' + cp);
+        const names = Object.keys(data[0]).filter(k => k !== 'month');
+        const datasets = names.map(n => ({
+            label: n,
+            data: data.map(d => d[n]),
+            borderColor: CITY_COLORS[n] || '#90a4ae',
+            tension: 0.3,
+            fill: false
+        }));
+        makeChart('chartCityMonthly', {
+            type: 'line',
+            data: { labels: data.map(d => d.month + '月'), datasets },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+    }
+
+    // ─── 预测 ───
+    const POLLUTANT_LABEL = { PM25: 'PM2.5', PM10: 'PM10', O3: 'O3', NO2: 'NO2' };
+    const LEVEL_THRESHOLDS = {
+        PM25: [35, 75, 115, 150],
+        PM10: [50, 150, 250, 350],
+        O3: [100, 160, 215, 265],
+        NO2: [40, 80, 180, 280]
+    };
+    const LEVEL_NAMES = ['优', '良', '轻度污染', '中度污染', '重度污染'];
+    const LEVEL_COLORS = ['#66bb6a', '#42a5f5', '#ffa726', '#ef5350', '#c62828'];
+
+    function onPollutantChange() {
+        const p = document.getElementById('p_pollutant').value;
+        const label = POLLUTANT_LABEL[p];
+        document.getElementById('lag1Label').textContent = label + ' 滞后1h';
+        document.getElementById('lag24Label').textContent = label + ' 滞后24h';
+        document.getElementById('roll6Label').textContent = label + ' 6h均值';
+        loadFeatureImportance();
+        prefillPredict();
+    }
+
+    // ─── 用该城市最新实测值预填预测表单 ───
+    async function prefillPredict() {
+        const p = document.getElementById('p_pollutant').value;
+        try {
+            const d = await apiGet('/api/predict/prefill?pollutant=' + p + '&city=' + currentCity);
+            const f = d.features;
+            const fieldMap = [['p_PM25','PM25'],['p_PM10','PM10'],['p_SO2','SO2'],['p_NO2','NO2'],
+                              ['p_CO','CO'],['p_O3','O3'],['p_temp','temperature'],['p_humidity','humidity'],['p_wind','wind_speed']];
+            for (const [id, key] of fieldMap) {
+                if (f[key] !== undefined) document.getElementById(id).value = f[key];
+            }
+            if (f[p + '_lag1h'] !== undefined) document.getElementById('p_lag1h').value = f[p + '_lag1h'];
+            if (f[p + '_lag24h'] !== undefined) document.getElementById('p_lag24h').value = f[p + '_lag24h'];
+            if (f[p + '_roll6h'] !== undefined) document.getElementById('p_roll6h').value = f[p + '_roll6h'];
+            document.getElementById('prefillInfo').textContent = '已填入 ' + d.city + ' ' + d.timestamp + ' 的实测值';
+        } catch (e) { /* 忽略, 保留手动输入 */ }
+    }
+
+    async function runPredict() {
+        const resultDiv = document.getElementById('predictResult');
+        resultDiv.innerHTML = '<div class="loading">正在预测...</div>';
+        const p = document.getElementById('p_pollutant').value;
+        try {
+            const body = {
+                PM25: parseFloat(document.getElementById('p_PM25').value) || 0,
+                PM10: parseFloat(document.getElementById('p_PM10').value) || 0,
+                SO2: parseFloat(document.getElementById('p_SO2').value) || 0,
+                NO2: parseFloat(document.getElementById('p_NO2').value) || 0,
+                CO: parseFloat(document.getElementById('p_CO').value) || 0,
+                O3: parseFloat(document.getElementById('p_O3').value) || 0,
+                temperature: parseFloat(document.getElementById('p_temp').value) || 0,
+                humidity: parseFloat(document.getElementById('p_humidity').value) || 0,
+                wind_speed: parseFloat(document.getElementById('p_wind').value) || 0
+            };
+            body[p + '_lag1h'] = parseFloat(document.getElementById('p_lag1h').value) || 0;
+            body[p + '_lag24h'] = parseFloat(document.getElementById('p_lag24h').value) || 0;
+            body[p + '_roll6h'] = parseFloat(document.getElementById('p_roll6h').value) || 0;
+            const res = await apiPost('/api/predict?pollutant=' + p + '&city=' + currentCity, body);
+            const v = res.prediction;
+            const th = LEVEL_THRESHOLDS[p];
+            let idx = 0;
+            while (idx < th.length && v > th[idx]) idx++;
+            const color = LEVEL_COLORS[idx];
+            resultDiv.innerHTML = `
+                <div class="predict-result">
+                    <h3>预测结果（${res.city}）</h3>
+                    <div class="big" style="color:${color}">${v}</div>
+                    <div class="unit">μg/m³ — ${POLLUTANT_LABEL[res.pollutant]} 浓度</div>
+                    <div style="margin-top:12px; font-size:1.1rem; color:${color}">${LEVEL_NAMES[idx]}</div>
+                </div>`;
+        } catch (e) {
+            resultDiv.innerHTML = '<div class="error-msg">预测失败: ' + e.message + '</div>';
+        }
+    }
+
+    // ─── 未来 24h 预测预警 ───
+    async function loadForecastAlerts() {
+        try {
+            const data = await apiGet('/api/alerts/forecast?city=' + currentCity + '&pollutant=' + currentPollutant);
+            const a = data[0];
+            const plabel = pollutantLabel();
+            let html = '';
+            if (!a.will_exceed) {
+                html = `<span class="alert-badge alert-none">✅ ${a.station}未来 24 小时 ${plabel} 无预计超标风险</span>`;
+            } else {
+                const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
+                html = `<span class="alert-badge ${cls}">⚠️ ${a.station} ${plabel} 预计 ${a.first_exceed_in_hours}h 后超标（24h峰值 ${a.forecast_24h_max}，阈值 ${a.threshold}）</span>`;
+            }
+            html += `<div style="margin-top:10px; color:#90a4ae; font-size:0.85rem;">预测起点: ${a.forecast_start} | 24h预测均值 ${a.forecast_24h_mean} | 峰值 ${a.forecast_24h_max} | 阈值 ${a.threshold} μg/m³</div>`;
+            document.getElementById('forecastAlertsArea').innerHTML = html;
+
+            const th = a.threshold;
+            makeChart('chartForecast24', {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => '+' + (i + 1) + 'h'),
+                    datasets: [
+                        {
+                            label: a.station + ' ' + plabel + ' 24h 预测',
+                            data: a.forecast_series,
+                            borderColor: '#64b5f6',
+                            backgroundColor: '#64b5f620',
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 2
+                        },
+                        {
+                            label: '超标阈值 ' + th,
+                            data: Array(24).fill(th),
+                            borderColor: '#ef5350',
+                            borderDash: [6, 6],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+            });
+        } catch (e) {
+            document.getElementById('forecastAlertsArea').innerHTML = '<div class="error-msg">加载预测预警失败（模型可能尚未训练，请先调用 /api/model/train）</div>';
+        }
+    }
+
+    // ─── 特征重要性 ───
+    async function loadFeatureImportance() {
+        const p = document.getElementById('p_pollutant') ? document.getElementById('p_pollutant').value : 'PM25';
+        document.getElementById('predictCityTag').textContent = '（当前城市: ' + cityName() + '）';
+        const data = await apiGet('/api/model/feature-importance?pollutant=' + p + '&city=' + currentCity);
+        makeChart('chartFeatureImportance', {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.feature),
+                datasets: [{
+                    label: '重要性 (%)',
+                    data: data.map(d => d.percentage),
+                    backgroundColor: '#64b5f6'
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    // ─── AI 聊天 ───
+    // 简易 Markdown 渲染: 先 HTML 转义防注入, 再转换粗体/行内代码/标题/列表/换行
+    function renderMarkdown(text) {
+        if (!text) return '';
+        let html = text
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');          // `code`
+        html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>'); // **粗体**
+        html = html.replace(/^#{1,4}\s*(.+)$/gm, '<strong>$1</strong>');  // # 标题
+        html = html.replace(/^\s*[\-\*]\s+(.+)$/gm, '&bull; $1');         // - 列表
+        html = html.replace(/\n/g, '<br>');                               // 换行
+        return html;
+    }
+
+    function escapeHtml(text) {
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function sendChat() {
+        const input = document.getElementById('chatInput');
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = '';
+
+        const container = document.getElementById('chatContainer');
+        container.innerHTML += `<div class="chat-message chat-user">${escapeHtml(question)}</div>`;
+        container.scrollTop = container.scrollHeight;
+
+        try {
+            const res = await apiPost('/api/chat', { question, city: currentCity });
+            const sourceTag = res.source === 'rule' ? '规则引擎' : 'FastGPT 大模型';
+            container.innerHTML += `<div class="chat-message chat-bot">${renderMarkdown(res.answer)}<div style="font-size:0.7rem; color:#78909c; margin-top:6px;">来源: ${sourceTag}</div></div>`;
+        } catch (e) {
+            container.innerHTML += `<div class="chat-message chat-bot" style="color:#ef5350">抱歉，请求失败，请稍后重试。</div>`;
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // ─── 初始化 ───
+    async function loadCityScoped() {
+        await loadOverview();
+        await loadRealtime();
+        await loadChartPm25Monthly();
+        await loadChartAqiDist();
+        await loadChartSeason();
+        await loadChartDiurnal();
+        await loadChartPollutantMeans();
+        await loadChartPrimary();
+        await loadCorrelation();
+        await loadAlerts();
+        await loadForecastAlerts();
+        await loadFeatureImportance();
+        await prefillPredict();
+    }
+
+    async function init() {
+        renderCityBar();
+        renderPollutantBar();
+        await loadCityScoped();
+        await loadCityTable();
+        await loadCityCompareChart();
+        await loadCityMonthlyChart();
+    }
+    init();
+    </script>
+</body>
+</html>
